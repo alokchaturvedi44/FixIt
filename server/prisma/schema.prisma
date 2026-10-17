@@ -7,3 +7,232 @@ datasource db {
   provider = "postgresql"
 }
 
+// ENUMS
+
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PricingType {
+  FIXED
+  HOURLY
+  INSPECTION
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  MATCHED
+  BOOKED
+  CANCELLED
+  COMPLETED
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+// 1. USERS
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  role      UserRole @default(CUSTOMER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  providerProfile ProviderProfile?
+  addresses       Address[]
+  serviceRequests ServiceRequest[]
+  reviewsGiven    Review[]
+}
+
+// 2. PROVIDER PROFILES
+
+model ProviderProfile {
+  id                 String             @id @default(uuid())
+  userId             String             @unique
+  bio                String?
+  experienceYears    Int                @default(0)
+  verificationStatus VerificationStatus @default(PENDING)
+  rating             Float              @default(0)
+  totalJobs          Int                @default(0)
+  serviceRadiusKm    Float              @default(10)
+  latitude           Float?
+  longitude          Float?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user     User              @relation(fields: [userId], references: [id])
+  services ProviderService[]
+  bookings Booking[]
+  reviews  Review[]
+}
+
+// 3. CATEGORIES
+
+model Category {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+
+  services Service[]
+}
+
+// 4. SERVICES
+
+model Service {
+  id          String      @id @default(uuid())
+  categoryId  String
+  name        String
+  description String?
+  pricingType PricingType
+  basePrice   Decimal?
+  isActive    Boolean     @default(true)
+
+  category        Category          @relation(fields: [categoryId], references: [id])
+  providers       ProviderService[]
+  serviceRequests ServiceRequest[]
+
+  @@index([categoryId])
+}
+
+// 5. PROVIDER SERVICES
+
+model ProviderService {
+  id         String   @id @default(uuid())
+  providerId String
+  serviceId  String
+  price      Decimal
+  createdAt  DateTime @default(now())
+
+  provider ProviderProfile @relation(fields: [providerId], references: [id])
+  service  Service         @relation(fields: [serviceId], references: [id])
+
+  @@unique([providerId, serviceId])
+  @@index([serviceId])
+}
+
+// 6. ADDRESSES
+
+model Address {
+  id          String   @id @default(uuid())
+  userId      String
+  addressLine String
+  city        String
+  state       String
+  pincode     String
+  latitude    Float?
+  longitude   Float?
+  createdAt   DateTime @default(now())
+
+  user            User             @relation(fields: [userId], references: [id])
+  serviceRequests ServiceRequest[]
+
+  @@index([userId])
+}
+
+// 7. SERVICE REQUESTS
+
+model ServiceRequest {
+  id            String               @id @default(uuid())
+  customerId    String
+  serviceId     String
+  addressId     String
+  title         String
+  description   String
+  preferredDate DateTime?
+  preferredTime String?
+  status        ServiceRequestStatus @default(OPEN)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  customer User      @relation(fields: [customerId], references: [id])
+  service  Service   @relation(fields: [serviceId], references: [id])
+  address  Address   @relation(fields: [addressId], references: [id])
+  bookings Booking[]
+
+  @@index([customerId])
+  @@index([serviceId])
+  @@index([addressId])
+  @@index([status])
+}
+
+// 8. BOOKINGS
+
+model Booking {
+  id               String        @id @default(uuid())
+  serviceRequestId String
+  providerId       String
+  scheduledDate    DateTime
+  scheduledTime    String
+  status           BookingStatus @default(PENDING)
+  agreedPrice      Decimal
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  serviceRequest ServiceRequest  @relation(fields: [serviceRequestId], references: [id])
+  provider       ProviderProfile @relation(fields: [providerId], references: [id])
+  review         Review?
+  payments       Payment[]
+
+  @@index([serviceRequestId])
+  @@index([providerId])
+  @@index([status])
+}
+
+// 9. REVIEWS
+
+model Review {
+  id         String   @id @default(uuid())
+  bookingId  String   @unique
+  customerId String
+  providerId String
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  booking  Booking         @relation(fields: [bookingId], references: [id])
+  customer User            @relation(fields: [customerId], references: [id])
+  provider ProviderProfile @relation(fields: [providerId], references: [id])
+
+  @@index([customerId])
+  @@index([providerId])
+}
+
+// 10. PAYMENTS
+
+model Payment {
+  id            String        @id @default(uuid())
+  bookingId     String
+  amount        Decimal
+  status        PaymentStatus @default(PENDING)
+  paymentMethod String
+  transactionId String?       @unique
+  createdAt     DateTime      @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+}
